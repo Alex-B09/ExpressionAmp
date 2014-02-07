@@ -1,0 +1,14 @@
+This is a list of all the things that I want this librairy to do at some point.
+
+Add 2 matrices
+dot product
+transpose matrix
+play with constants
+    add (substract)
+    multiply (divide)
+inverse matrix
+eigen 
+    values
+    vectors
+
+
