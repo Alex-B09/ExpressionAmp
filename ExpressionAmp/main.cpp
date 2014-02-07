@@ -6,21 +6,34 @@
 // TODO will not work pass 2D -- limitation for now...
 // template maybe?
 template <int D, typename T>
-struct Matrix
+class Matrix
 {
+public:
+    enum {DIMENSION = D};
+
     typedef T dataType;
+
+    // the choice of using a concurrency::array is to force the data in the 
     typedef concurrency::array<dataType, D> arrayType;
     typedef concurrency::extent<D> shapeType;
-    
-    Matrix()
+    typedef std::vector<dataType> dataContainer;
+
+
+private:
+    shapeType m_shape;
+    dataContainer m_data;
+
+public:
+    Matrix(const shapeType & SHAPE)
+        :m_shape(SHAPE)
     {
-        // TODO do something about values
     }
 
     // I have complete ownership of the data
-    void SetData(std::vector<dataType> && data, shapeType shape)
+    void SetData(dataContainer && data)
     {
-        m_data = arrayType(shape, data.begin(), data.end());
+        // TODO continue here.....
+        m_data = arrayType(m_shape, data.begin(), data.end());
     }
 
     std::vector<dataType> GetData()
@@ -83,7 +96,6 @@ struct Expression
 };
 
 
-
 template <class element1, class element2, class opp>
 struct ComplexExpression
 {
@@ -97,8 +109,8 @@ struct ComplexExpression
     {
     }
 
-    //auto operator()()->opp::apply(element1, element2)
-    auto operator()()->int
+    auto operator()() -> decltype(opp::apply(element1, element2))
+    //auto operator()()->int
     {
         return opp::apply(m_element, m_element2)
     }
