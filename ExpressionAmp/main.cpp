@@ -2,6 +2,7 @@
 #include <amp.h>
 #include <array>
 #include <vector>
+#include <utility>
 
 // TODO will not work pass 2D -- limitation for now...
 // template maybe?
@@ -17,7 +18,6 @@ public:
     typedef concurrency::array<dataType, D> arrayType;
     typedef concurrency::extent<D> shapeType;
     typedef std::vector<dataType> dataContainer;
-
 
 private:
     shapeType m_shape;
@@ -77,6 +77,12 @@ public:
         :m_variable(variable)
     {
     }
+
+    int GetValues() const
+    {
+        // TODO
+        return 1;
+    }
 };
 
 //template <typename T>
@@ -109,23 +115,51 @@ struct ComplexExpression
     {
     }
 
+    
     auto operator()() -> decltype(opp::apply(element1, element2))
-    //auto operator()()->int
     {
         return opp::apply(m_element, m_element2)
     }
+
+
 };
 
-
-
-struct Addition
+struct Add
 {
+    // I still have to find a good return value....a variable maybe??
     template<class element1, class element2>
-    static void apply(element1, element2)   // TODO return type
+    static auto apply(Variable<element1> left, Variable<element1> right) 
+        ->concurrency::array<decltype(std::declval<Variable<element1>::dataType>() + std::declval<Variable<element2>::dataType>()), Variable<element2>::DIMENSION>
     {
+        typedef decltype(std::declval<Variable<element1>::dataType>() + std::declval<Variable<element2>::dataType>()), Variable<element2>::DIMENSION> dataType;
+        const int DIMENSION = Variable<element2>::DIMENSION;
+
+        
+        //-------------------------------------------------------
+        // TODO something for the extent
+        concurrency::array<dataType, DIMENSION> returnValue(element2.extent);
+        auto & leftValues = left.GetValues();
+        auto & rightValues = right.GetValues();
+
+        concurrency::parallel_for_each(
+            returnValue.extent,
+            [=](concurrency::index<DIMENSION> idx) restrict(amp)
+            {
+                returnValue[idx] = leftValues[idx] + rightValues[idx];
+            });
+
+
+        return concurrency::array<dataType, DIMENSION>();
 
     }
+
+    // TODO maybe static assert on rank difference...
 };
+
+template <class C>
+struct OpperationTraits;
+// TODO
+
 
 
 int main()
@@ -136,8 +170,8 @@ int main()
     //vector<int> ve1 = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
     //vector<int> ve2 = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
 
-    Matrix2f m1;
-    Matrix2f m2;
+    Matrix2f m1(shape);
+    Matrix2f m2(shape);
 
 
 }
