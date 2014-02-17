@@ -169,8 +169,8 @@ struct RankTraits<ComplexExpression<Element1, Element2, Opp>>
 {
     enum
     {
-        LeftDataRank = typename RankTraits<Element1>::RANK,
-        RightDataRank = typename RankTraits<Element2>::RANK,
+        LeftDataRank = RankTraits<Element1>::RANK,
+        RightDataRank = RankTraits<Element2>::RANK,
 
         RANK = RankTraitsOppBased<LeftDataRank, RightDataRank, Add>::RANK
     };
@@ -259,8 +259,6 @@ template <class Element1, class Element2>
 auto operator+(Element1 & left, Element2 & right) -> Expression<ComplexExpression<Element1, Element2, Add>>
 {
     using ComplexExpr = ComplexExpression<Element1, Element2, Add>;
-
-    //ComplexExpr returnValue(Expression<Element1>(left), Expression<Element1>(right));
     return Expression<ComplexExpr>(ComplexExpr(Expression<Element1>(left), Expression<Element1>(right)));
 }
 
@@ -271,6 +269,8 @@ typedef Matrix<2, int> Matrix2i;
 int main()
 {
     using std::vector;
+
+    // this is fixed for now
     Matrix2i::shapeType shape(5, 2);
 
     vector<int> v1 = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
