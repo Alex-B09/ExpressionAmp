@@ -17,6 +17,9 @@ struct RankTraits;
 template <class M>
 struct ArrayTypeTraits;
 
+template<class M>
+struct ShapeTraits;
+
 //----------------------------------------------
 
 // TODO will not work pass 2D -- limitation for now...
@@ -51,12 +54,17 @@ public:
         m_data = arrayType(m_shape, data.begin(), data.end());
     }
 
-    arrayType GetData()
+    arrayType GetData() const
     {
         return m_data;
     }
 
-    arrayType operator()()
+    shapeType GetShape() const
+    {
+        return m_shape;
+    }
+
+    arrayType operator()() const
     {
         return GetData();
     }
@@ -73,7 +81,8 @@ struct Expression
     }
 
     // operator () avec return Type Traits
-    auto operator()() -> typename ArrayTypeTraits<Element>::arrayType
+    auto operator()() const 
+        -> typename ArrayTypeTraits<Element>::arrayType 
     {
         return m_element();
     }
@@ -96,7 +105,9 @@ struct ComplexExpression
     {
     }
 
-    auto operator()() -> decltype(Opp::apply(std::declval<expressionLeft>(), std::declval<expressionRight>()))
+    auto operator()() 
+        -> decltype(Opp::apply(std::declval<expressionLeft>(), 
+                               std::declval<expressionRight>()))
     {
         return Opp::apply(m_leftOperand, m_rightOperand);
     }
@@ -142,7 +153,6 @@ struct DataTypeTraits<Expression<M>>
     using dataType = typename DataTypeTraits<M>::dataType;
 };
 
-// Complex Expression
 template <class Element1, class Element2, class Opp>
 struct DataTypeTraits<ComplexExpression<Element1, Element2, Opp>>
 {
@@ -202,10 +212,68 @@ struct ArrayTypeTraits<ComplexExpression<Element1, Element2, Opp>>
     using arrayType = concurrency::array<dataType, RANK>;
 };
 
+template <typename type, int Rank>
+struct ShapeTraits<Matrix<Rank, type>>
+{
+    using shapeType = typename Matrix<Rank, type>::shapeType;
+};
+
+template <class M>
+struct ShapeTraits<Expression<M>>
+{
+    using shapeType = typename ShapeTraits<M>::shapeType;
+};
+
+template <class Element1, class Element2, class Opp>
+struct ShapeTraits<ComplexExpression<Element1, Element2, Opp>>
+{
+    // TODO apply the same kind of magic that was applied to DataTypeTraits
+    //      to get the right shape applied to the right opp
+    //      For now, it will only work with opp that dont change the rank
+
+    using ComplexExpr = ComplexExpression<Element1, Element2, Opp>;
+
+    enum { RANK = RankTraits<ComplexExpr>::RANK };
+
+    using shapeType = concurrency::extent<RANK>;
+};
+
 // end traits
 //----------------------------------------------
 
-//------------------------------------
+//----------------------------------------------
+// helper function
+
+
+// TODO there is still work to do on the GetShape
+//      Must I use the fuction?
+template <typename type, int Rank>
+auto GetShape(const Matrix<Rank, type> & matrix) 
+    -> typename ShapeTraits<Matrix<Rank, type>>::shapeType
+{
+    return matrix.GetShape();
+}
+
+template <class M>
+auto GetShape(const Expression<M> & expression) 
+    -> typename ShapeTraits<Expression<M>>::shapeType
+{
+    return GetShape(expression.m_element);
+}
+
+template <class Element1, class Element2, class Opp>
+auto GetShape(const ComplexExpression<Element1, Element2, Opp> & complexExpression) 
+    -> typename ShapeTraits<ComplexExpression<Element1, Element2, Opp>>::shapeType
+{
+    // TODO correct that in the near future to not only take the left element
+    return GetShape(complexExpression.m_leftOperand);
+}
+
+//----------------------------------------------
+
+
+
+//----------------------------------------------
 // Opps
 struct Add
 {
@@ -219,15 +287,15 @@ struct Add
         
         const int RANK = RankTraits<ComplexExpr>::RANK;
 
-        //-------------------------------------------------------
-        // TODO something for the extent
-        arrayType returnValue(concurrency::extent<RANK>(5, 2));
+        // since it's an add, it can either be left or right.
+        // TODO once there are constants, there will be work to do here
+        arrayType returnValue(GetShape(left));
         auto & leftValues = left();
         auto & rightValues = right();
 
         concurrency::parallel_for_each(
             returnValue.extent,
-            // restrict (amp) is realy pick on how to pass concurrency::array -- only by ref
+            // restrict (amp) is realy picky on how to pass concurrency::array -- only by ref
             [&](concurrency::index<RANK> idx) restrict(amp)
             {
                 returnValue[idx] = leftValues[idx] + rightValues[idx];
@@ -236,10 +304,10 @@ struct Add
         return returnValue;
     }
 };
-//------------------------------------
+//----------------------------------------------
 
 
-//------------------------------------
+//----------------------------------------------
 // opperation based Traits
 template <class DataType1, class DataType2>
 struct DataTypeTraitsOppBased<DataType1, DataType2, Add>
@@ -252,7 +320,7 @@ struct RankTraitsOppBased<Rank1, Rank2, Add>
 {
     enum { RANK = Rank1};
 };
-//------------------------------------
+//----------------------------------------------
 
 
 template <class Element1, class Element2>
@@ -261,7 +329,6 @@ auto operator+(Element1 & left, Element2 & right) -> Expression<ComplexExpressio
     using ComplexExpr = ComplexExpression<Element1, Element2, Add>;
     return Expression<ComplexExpr>(ComplexExpr(Expression<Element1>(left), Expression<Element1>(right)));
 }
-
 
 
 typedef Matrix<2, int> Matrix2i;
@@ -283,11 +350,17 @@ int main()
     m2.SetData(std::move(v2));
 
     auto t1 = m1 + m2;
-    auto t2 = t1();
+
+    // amp array<type> is convertible to vector<type>
+    vector<int> v3 = t1();
+
+    if (GetShape(t1) != shape)
+    {
+        std::cout << "Shape problem !!!!" << std::endl;
+    }
 
     // this step is necessary for the fetching of the data from the accelerator
-    vector<int> v3 = t2;
-
+    
     for (auto i : v3)
     {
         std::cout << i << std::endl;
