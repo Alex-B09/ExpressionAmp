@@ -28,7 +28,7 @@ class Matrix
 {
 public:
     enum {RANK = R};
-
+    
     using dataType = T;
 
     // the choice of using a concurrency::array is to force the data in the 
@@ -327,7 +327,7 @@ template <class Element1, class Element2>
 auto operator+(Element1 & left, Element2 & right) -> Expression<ComplexExpression<Element1, Element2, Add>>
 {
     using ComplexExpr = ComplexExpression<Element1, Element2, Add>;
-    return Expression<ComplexExpr>(ComplexExpr(Expression<Element1>(left), Expression<Element1>(right)));
+    return Expression<ComplexExpr>(ComplexExpr(Expression<Element1>(left), Expression<Element2>(right)));
 }
 
 
@@ -346,21 +346,16 @@ int main()
     Matrix2i m1(shape);
     Matrix2i m2(shape);
 
+    // build the expression
+    auto t1 = m1 + m2;
+    auto t2 = t1 + m2;
+
     m1.SetData(std::move(v1));
     m2.SetData(std::move(v2));
 
-    auto t1 = m1 + m2;
-
     // amp array<type> is convertible to vector<type>
-    vector<int> v3 = t1();
+    vector<int> v3 = t2();
 
-    if (GetShape(t1) != shape)
-    {
-        std::cout << "Shape problem !!!!" << std::endl;
-    }
-
-    // this step is necessary for the fetching of the data from the accelerator
-    
     for (auto i : v3)
     {
         std::cout << i << std::endl;
