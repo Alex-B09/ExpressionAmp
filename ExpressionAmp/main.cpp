@@ -8,6 +8,8 @@
 //----------------------------------------------
 //traits declaration
 
+// traits is maybe not a good name for what thoses do....
+// TODO rename thoses -- maybe
 template <class M>
 struct DataTypeTraits;
 
@@ -31,7 +33,6 @@ public:
     
     using dataType = T;
 
-    // the choice of using a concurrency::array is to force the data in the 
     using arrayType = concurrency::array<dataType, RANK>;
     using shapeType = concurrency::extent<RANK>;
     using dataContainer = std::vector<dataType>;
@@ -70,6 +71,51 @@ public:
     }
 };
 
+template <typename T>
+class Constant
+{
+public:
+    using dataType = T;
+
+    // I took the decision to define the same types as in a matrix.
+    // This implies that thic class can use the same traits as a
+    // matrix
+    // This may bite me in the "behind" in later stages...
+    // but it works well for now
+    using arrayType = concurrency::array<dataType, 1>;
+    using shapeType = concurrency::extent<1>;
+
+private:
+    dataType m_constantValue;
+    shapeType m_shape;
+    arrayType m_value;
+    
+    
+
+public:
+    Constant(dataType value)
+        :m_constantValue(value)
+        ,m_shape(1)
+        ,m_value(m_shape, &m_constantValue)
+    {
+    }
+
+    arrayType GetData() const
+    {
+        return m_value;
+    }
+
+    shapeType GetShape() const
+    {
+        return shape;
+    }
+
+    arrayType operator()() const
+    {
+        return GetData();
+    }
+};
+
 template <class Element>
 struct Expression
 {
@@ -80,9 +126,8 @@ struct Expression
     {
     }
 
-    // operator () avec return Type Traits
     auto operator()() const 
-        -> typename ArrayTypeTraits<Element>::arrayType 
+        -> decltype(m_element())
     {
         return m_element();
     }
@@ -105,7 +150,7 @@ struct ComplexExpression
     {
     }
 
-    auto operator()() 
+    auto operator()() const
         -> decltype(Opp::apply(std::declval<expressionLeft>(), 
                                std::declval<expressionRight>()))
     {
@@ -125,7 +170,8 @@ struct Expression<ComplexExpression<Element1, Element2, Opp>>
     }
 
     // operator () avec return Type Traits
-    auto operator()() -> typename ArrayTypeTraits<ComplexExpr>::arrayType
+    auto operator()() const
+        -> typename ArrayTypeTraits<ComplexExpr>::arrayType
     {
         return m_element();
     }
@@ -146,7 +192,7 @@ struct DataTypeTraits
     using dataType = typename M::dataType;
 };
 
-// TODO at some point, constant...
+
 template <class M>
 struct DataTypeTraits<Expression<M>>
 {
@@ -166,6 +212,12 @@ template <class M>
 struct RankTraits
 {
     enum{ RANK = M::RANK};
+};
+
+template <typename T>
+struct RankTraits<Constant<T>>
+{
+    enum{ RANK = 1 };
 };
 
 template <class M>
@@ -193,7 +245,6 @@ struct ArrayTypeTraits
     using arrayType = typename M::arrayType;
 };
 
-// TODO at some point, constant...
 template <class M>
 struct ArrayTypeTraits<Expression<M>>
 {
@@ -216,6 +267,12 @@ template <typename type, int Rank>
 struct ShapeTraits<Matrix<Rank, type>>
 {
     using shapeType = typename Matrix<Rank, type>::shapeType;
+};
+
+template <typename T>
+struct ShapeTraits<Constant<T>>
+{
+    using shapeType = typename Constant<T>::shapeType;
 };
 
 template <class M>
@@ -249,21 +306,28 @@ struct ShapeTraits<ComplexExpression<Element1, Element2, Opp>>
 //      Must I use the fuction?
 template <typename type, int Rank>
 auto GetShape(const Matrix<Rank, type> & matrix) 
-    -> typename ShapeTraits<Matrix<Rank, type>>::shapeType
+    -> typename decltype(matrix.GetShape())
 {
     return matrix.GetShape();
 }
 
+template <typename T>
+auto GetShape(const Constant<T> & constant)
+    -> decltype(constant.GetShape())
+{
+    return constant.GetShape();
+}
+
 template <class M>
 auto GetShape(const Expression<M> & expression) 
-    -> typename ShapeTraits<Expression<M>>::shapeType
+    -> decltype(GetShape(expression.m_element))
 {
     return GetShape(expression.m_element);
 }
 
 template <class Element1, class Element2, class Opp>
 auto GetShape(const ComplexExpression<Element1, Element2, Opp> & complexExpression) 
-    -> typename ShapeTraits<ComplexExpression<Element1, Element2, Opp>>::shapeType
+    -> decltype(GetShape(complexExpression.m_leftOperand))
 {
     // TODO correct that in the near future to not only take the left element
     return GetShape(complexExpression.m_leftOperand);
@@ -303,6 +367,34 @@ struct Add
 
         return returnValue;
     }
+
+
+    // the constant will always be on the right....never on the left
+    template<class leftExpression, typename T>
+    static auto apply(leftExpression left, Expression<Constant<T>> right)
+        ->typename ArrayTypeTraits<ComplexExpression<leftExpression, Expression<Constant<T>>, Add>>::arrayType
+    {
+        using ComplexExpr = ComplexExpression<leftExpression, Expression<Constant<T>>, Add>;
+        using arrayType = typename ArrayTypeTraits<ComplexExpr>::arrayType;
+
+        const int RANK = RankTraits<ComplexExpr>::RANK;
+
+        // since the left right expression is a constant, only the left matters
+        arrayType returnValue(GetShape(left));
+        auto & leftValues = left();
+        auto & rightValue = right();
+
+        concurrency::parallel_for_each(
+            returnValue.extent,
+            // restrict (amp) is realy picky on how to pass concurrency::array -- only by ref
+            [&](concurrency::index<RANK> idx) restrict(amp)
+        {
+            // TODO this is a ugly, ugly hack...must thing of something
+            returnValue[idx] = leftValues[idx] + rightValue[0];
+        });
+
+        return returnValue;
+    }
 };
 //----------------------------------------------
 
@@ -324,30 +416,48 @@ struct RankTraitsOppBased<Rank1, Rank2, Add>
 
 
 template <class Element1, class Element2>
-auto operator+(Element1 & left, Element2 & right) -> Expression<ComplexExpression<Element1, Element2, Add>>
+auto operator+(Element1 & left, Element2 & right)
+    ->Expression<ComplexExpression<Element1, Element2, Add>>
 {
     using ComplexExpr = ComplexExpression<Element1, Element2, Add>;
-    return Expression<ComplexExpr>(ComplexExpr(Expression<Element1>(left), Expression<Element2>(right)));
+    return Expression<ComplexExpr>(ComplexExpr(left, right));
 }
+
+// constant to the right
+template <class Element1, typename T>
+auto operator+(Constant<T> & left, Element1 &right)
+    ->decltype(right + left)
+{
+    return right + left;
+}
+
+//---------------------------------------
+// Test
 
 
 typedef Matrix<2, int> Matrix2i;
+typedef Constant<int> iScalar;
 
 int main()
 {
+    using std::cout;
+    using std::endl;
+    
     using std::vector;
+
+    
+    iScalar alpha = 3;
+
+    vector<int> v1 = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+    vector<int> v2 = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
 
     // this is fixed for now
     Matrix2i::shapeType shape(5, 2);
-
-    vector<int> v1 = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
-    vector<int> v2 = { 2, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
-
     Matrix2i m1(shape);
     Matrix2i m2(shape);
 
     // build the expression
-    auto t1 = m1 + m2;
+    auto t1 = alpha + m1;
     auto t2 = t1 + m2;
 
     m1.SetData(std::move(v1));
@@ -358,6 +468,6 @@ int main()
 
     for (auto i : v3)
     {
-        std::cout << i << std::endl;
+        cout << i << endl;
     }
 }
