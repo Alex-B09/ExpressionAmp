@@ -3,6 +3,7 @@
 #include <array>
 #include <vector>
 #include <utility>
+#include <boost\type_traits.hpp>
 
 
 //----------------------------------------------
@@ -90,8 +91,6 @@ private:
     shapeType m_shape;
     arrayType m_value;
     
-    
-
 public:
     Constant(dataType value)
         :m_constantValue(value)
@@ -133,6 +132,26 @@ struct Expression
     }
 };
 
+template <typename T>
+struct Expression<Constant<T>>
+{
+    using constantType = Constant<T>;
+
+    // the difference here is that this class does not contain
+    // a reference to the element....it is the element
+    constantType m_element;
+
+    Expression(constantType & element)
+        :m_element(element)
+    {
+    }
+
+    auto operator()() const
+        -> decltype(m_element())
+    {
+        return m_element();
+    }
+};
 
 template <class Element1, class Element2, class Opp>
 struct ComplexExpression
@@ -415,20 +434,80 @@ struct RankTraitsOppBased<Rank1, Rank2, Add>
 //----------------------------------------------
 
 
-template <class Element1, class Element2>
-auto operator+(Element1 & left, Element2 & right)
-    ->Expression<ComplexExpression<Element1, Element2, Add>>
-{
-    using ComplexExpr = ComplexExpression<Element1, Element2, Add>;
-    return Expression<ComplexExpr>(ComplexExpr(left, right));
-}
+// operator definition
+template <class leftElement, class rightElement>
+struct operatorAdd;
 
-// constant to the right
-template <class Element1, typename T>
-auto operator+(Constant<T> & left, Element1 &right)
-    ->decltype(right + left)
+
+// this will make the right choice for the types 
+template <bool leftIsPrimitive, bool rightIsPrimitive, class leftElement, class rightElement>
+struct operatorAddHelper;
+// DO NOT IMPLEMENT true, true since it is a basic operator.
+
+// closing case : when the 2 elements are not primitives
+template <class leftElement, class rightElement>
+struct operatorAddHelper<false, false, leftElement, rightElement>
 {
-    return right + left;
+    using ComplexExpr = ComplexExpression<leftElement, rightElement, Add>;
+    using returnType = Expression<ComplexExpr>;
+
+    returnType operator()(leftElement & lhs, rightElement & rhs)
+    {
+        return returnType(ComplexExpr(lhs, rhs));
+    }
+};
+
+// when the left is primitif and the other is not
+template <class leftElement, class rightElement>
+struct operatorAddHelper<true, false, leftElement, rightElement>
+{
+    // if left is primitif, switch them up
+    using returnType = typename operatorAdd<rightElement, Constant<leftElement>>::returnType;
+
+    returnType operator()(leftElement & lhs, rightElement & rhs)
+    {
+        return internalOperatorAdd()(rhs, Constant<leftElement>(lhs));
+    }
+};
+
+// when the right is primitif and the other is not
+template <class leftElement, class rightElement>
+struct operatorAddHelper<false, true, leftElement, rightElement>
+{
+    // if right is primitif, transform it into constant
+    using internalOperatorAdd = operatorAdd<leftElement, Constant<rightElement>>;
+    using returnType = typename internalOperatorAdd::returnType;
+
+    returnType operator()(leftElement & lhs, rightElement & rhs)
+    {
+        return internalOperatorAdd()(lhs, Constant<rightElement>(rhs));
+    }
+};
+
+
+template <class leftElement, class rightElement>
+struct operatorAdd
+{
+    using internalHelper =
+        operatorAddHelper<std::is_fundamental<leftElement>::value,
+                          std::is_fundamental<rightElement>::value,
+                          leftElement,
+                          rightElement>;
+    using returnType = typename internalHelper::returnType;
+    
+    returnType operator()(leftElement & lhs, rightElement & rhs)
+    {
+        return internalHelper()(lhs, rhs);
+    }
+};
+
+
+template <class leftElement, class rightElement>
+auto operator+(leftElement & lhs, rightElement & rhs)
+    ->typename operatorAdd<leftElement, rightElement>::returnType
+{
+    using helper = operatorAdd<leftElement, rightElement>;
+    return helper()(lhs, rhs);
 }
 
 //---------------------------------------
@@ -436,35 +515,34 @@ auto operator+(Constant<T> & left, Element1 &right)
 
 
 typedef Matrix<2, int> Matrix2i;
-typedef Constant<int> iScalar;
 
 int main()
 {
     using std::cout;
     using std::endl;
     
-    using std::vector;
+    using vector = std::vector<int>;
 
-    
-    iScalar alpha = 3;
-
-    vector<int> v1 = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
-    vector<int> v2 = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
+    vector v1 = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+    vector v2 = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
 
     // this is fixed for now
     Matrix2i::shapeType shape(5, 2);
     Matrix2i m1(shape);
     Matrix2i m2(shape);
 
+    //const int alpha = 3; ----- THIS DOES NOT WORK -- to check later...
+    int alpha = 3;
     // build the expression
-    auto t1 = alpha + m1;
+    auto t1 = m1 + alpha;
+    // auto t1 = m1 + 3; -------THIS DOES NOT WORK -- to check later...
     auto t2 = t1 + m2;
 
     m1.SetData(std::move(v1));
     m2.SetData(std::move(v2));
 
     // amp array<type> is convertible to vector<type>
-    vector<int> v3 = t2();
+    vector v3 = t2();
 
     for (auto i : v3)
     {
