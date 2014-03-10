@@ -538,6 +538,10 @@ int main()
     // auto t1 = m1 + 3; -------THIS DOES NOT WORK -- to check later...
     auto t2 = t1 + m2;
 
+    // the 2 errors are prefecly normal
+    // since c++ does not allow from literals to reference (int to int&)
+    // The other error is releated to the Constant class. Something to check...
+
     m1.SetData(std::move(v1));
     m2.SetData(std::move(v2));
 
