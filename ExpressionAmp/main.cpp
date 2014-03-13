@@ -3,7 +3,7 @@
 #include <array>
 #include <vector>
 #include <utility>
-#include <boost\type_traits.hpp>
+#include <type_traits>
 
 
 //----------------------------------------------
@@ -76,8 +76,14 @@ template <typename T>
 class Constant
 {
 public:
-    using dataType = T;
-
+    // TODO maybe I should put a static assert on non-primitive types
+    
+    // concurrency::array does not like having constant.
+    // the change is to remove the const from the type
+    // By having the "type removal" here, there is no impact 
+    // on the operations 
+    using dataType = typename std::remove_const<T>::type;
+    
     // I took the decision to define the same types as in a matrix.
     // This implies that thic class can use the same traits as a
     // matrix
@@ -132,13 +138,13 @@ struct Expression
     }
 };
 
+// the Expression containing a constant is a special case
+// In oposition to when Expression contains a Matrix, a constant is not reference
+// hence, a constant is copied to the attribut.
 template <typename T>
 struct Expression<Constant<T>>
 {
     using constantType = Constant<T>;
-
-    // the difference here is that this class does not contain
-    // a reference to the element....it is the element
     constantType m_element;
 
     Expression(constantType & element)
@@ -462,11 +468,12 @@ template <class leftElement, class rightElement>
 struct operatorAddHelper<true, false, leftElement, rightElement>
 {
     // if left is primitif, switch them up
-    using returnType = typename operatorAdd<rightElement, Constant<leftElement>>::returnType;
+    using internalOperatorAdd = operatorAdd<rightElement, leftElement>;
+    using returnType = typename internalOperatorAdd::returnType;
 
     returnType operator()(leftElement & lhs, rightElement & rhs)
     {
-        return internalOperatorAdd()(rhs, Constant<leftElement>(lhs));
+        return internalOperatorAdd()(rhs, lhs);
     }
 };
 
@@ -531,22 +538,23 @@ int main()
     Matrix2i m1(shape);
     Matrix2i m2(shape);
 
-    //const int alpha = 3; ----- THIS DOES NOT WORK -- to check later...
-    int alpha = 3;
+    const int alpha = 3;
+    //int alpha = 3;
     // build the expression
-    auto t1 = m1 + alpha;
-    // auto t1 = m1 + 3; -------THIS DOES NOT WORK -- to check later...
-    auto t2 = t1 + m2;
+    auto t1 = alpha + m1;
+    //auto t1 = m1 + 3; //-------THIS DOES NOT WORK -- to check later...
 
-    // the 2 errors are prefecly normal
-    // since c++ does not allow from literals to reference (int to int&)
-    // The other error is releated to the Constant class. Something to check...
+    auto t2 = t1 + alpha;
+    auto t3 = t2 + m2;
+
+    // error : c++ does not allow from literals to reference (int to int&)
+    // I will have to find a solution to that problem
 
     m1.SetData(std::move(v1));
     m2.SetData(std::move(v2));
 
     // amp array<type> is convertible to vector<type>
-    vector v3 = t2();
+    vector v3 = t3();
 
     for (auto i : v3)
     {
