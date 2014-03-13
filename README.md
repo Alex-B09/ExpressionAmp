@@ -9,18 +9,25 @@ There is no goal on performance. It is just a learning project.
 
 ----------------------------
 
-Current status :
-  The add operation is almost complete. The only thing left is to handle literals.
+####Current status :
+The add operation is almost complete. The only thing left is to handle literals.
 
-What is working :
-  Add matrices
-  Add matrices to (single) variable
+----------------------------
+####What is working :
 
-Future features:
+Add matrices
+Add matrices to (single) variable
+
+----------------------------
+####Future features:
+
   element-wize multiplication
+  
   dot product (inner and outer product)
   
   many other...
 
-Dream Feature (what I'm aiming for in the long run ):
+----------------------------
+####Dream Feature (what I'm aiming for in the long run ):
+
   computing graph optimization : Perform optimization based on the graph computed from the expression.
