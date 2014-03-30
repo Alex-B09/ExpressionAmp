@@ -49,6 +49,9 @@ public:
     {
     }
 
+    Matrix(const Matrix<R, T> &) = delete;
+    Matrix & operator=(const Matrix<R, T> &) = delete;
+
     // I have complete ownership of the data
     void SetData(dataContainer && data)
     {
@@ -508,12 +511,12 @@ struct operatorAdd
     }
 };
 
-
+// use the power of reference colapsing to handle literals, constants and expressions
 template <class leftElement, class rightElement>
-auto operator+(leftElement & lhs, rightElement & rhs)
-    ->typename operatorAdd<leftElement, rightElement>::returnType
+auto operator+(leftElement && lhs, rightElement && rhs)
+->typename operatorAdd<typename std::remove_reference<leftElement>::type, typename std::remove_reference<rightElement>::type>::returnType
 {
-    using helper = operatorAdd<leftElement, rightElement>;
+    using helper = operatorAdd<typename std::remove_reference<leftElement>::type, typename std::remove_reference<rightElement>::type>;
     return helper()(lhs, rhs);
 }
 
@@ -538,17 +541,13 @@ int main()
     Matrix2i m1(shape);
     Matrix2i m2(shape);
 
-    const int alpha = 3;
+    const int alpha = 5;
     //int alpha = 3;
     // build the expression
-    auto t1 = alpha + m1;
-    //auto t1 = m1 + 3; //-------THIS DOES NOT WORK -- to check later...
+    auto t1 = m1 + 3;
 
     auto t2 = t1 + alpha;
     auto t3 = t2 + m2;
-
-    // error : c++ does not allow from literals to reference (int to int&)
-    // I will have to find a solution to that problem
 
     m1.SetData(std::move(v1));
     m2.SetData(std::move(v2));
