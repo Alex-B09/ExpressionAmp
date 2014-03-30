@@ -10,12 +10,15 @@ There is no goal on performance. It is just a learning project.
 ----------------------------
 
 ####Current status :
-The add operation is almost complete. The only thing left is to handle literals.
+The add operation is almost complete. 
+
+Now working on non static shapes.
 
 ----------------------------
 ####What is working :
 
 Add matrices
+
 Add matrices to (single) variable
 
 ----------------------------
